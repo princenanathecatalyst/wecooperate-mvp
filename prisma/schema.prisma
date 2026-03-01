@@ -1,0 +1,169 @@
+// Prisma Schema for WeCooperate MVP
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MEMBER
+  SILVER
+  GOLD
+  PLATINUM
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id                    String                    @id @default(cuid())
+  email                 String                    @unique
+  password              String
+  firstName             String
+  lastName              String
+  phone                 String?
+  role                  Role                      @default(MEMBER)
+  isVerified            Boolean                   @default(false)
+  verificationToken     String?
+  resetToken            String?
+  resetTokenExpiry      DateTime?
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
+  
+  // Relationships
+  payments              Payment[]
+  groupMembership       GroupMember?
+  leadingGroup          Group?                    @relation("GroupLeader")
+  announcements         Announcement[]
+  blogPosts             BlogPost[]
+  leadershipApplications LeadershipApplication[]
+  
+  @@index([email])
+  @@index([role])
+}
+
+model Group {
+  id          String        @id @default(cuid())
+  name        String
+  level       Role          // SILVER or GOLD
+  leaderId    String        @unique
+  leader      User          @relation("GroupLeader", fields: [leaderId], references: [id], onDelete: Cascade)
+  capacity    Int           // 200 for Silver, 100 for Gold
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  members     GroupMember[]
+  
+  @@index([leaderId])
+  @@index([level])
+}
+
+model GroupMember {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupId   String
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime @default(now())
+  
+  @@index([userId])
+  @@index([groupId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount          Float
+  currency        String        @default("NGN")
+  reference       String        @unique
+  paystackRef     String?
+  status          PaymentStatus @default(PENDING)
+  paymentDate     DateTime?
+  expiryDate      DateTime?     // Subscription valid until
+  metadata        Json?
+  webhookPayload  Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  @@index([userId])
+  @@index([reference])
+  @@index([status])
+  @@index([paymentDate])
+}
+
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String
+  content     String   @db.Text
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  targetRole  Role?    // null means all members
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([authorId])
+  @@index([targetRole])
+  @@index([isActive])
+}
+
+model BlogPost {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  excerpt     String?
+  content     String   @db.Text
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  coverImage  String?
+  isPublished Boolean  @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([slug])
+  @@index([authorId])
+  @@index([isPublished])
+}
+
+model LeadershipApplication {
+  id            String            @id @default(cuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetRole    Role              // SILVER or GOLD
+  motivation    String            @db.Text
+  experience    String            @db.Text
+  status        ApplicationStatus @default(PENDING)
+  reviewedBy    String?
+  reviewNotes   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  @@index([userId])
+  @@index([status])
+  @@index([targetRole])
+}
+
+model SystemSettings {
+  id                    String   @id @default(cuid())
+  key                   String   @unique
+  value                 String
+  description           String?
+  updatedAt             DateTime @updatedAt
+  
+  @@index([key])
+}
